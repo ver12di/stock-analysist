@@ -77,13 +77,28 @@ def build_gemini_client(api_key: str) -> Optional[GenerativeModel]:
 
 def fetch_spot_info(code: str) -> Optional[Dict]:
     try:
-        df = ak.stock_zh_a_spot_em()
-        if df is None or df.empty:
+        info_df = ak.stock_individual_info_em(symbol=code)
+        if info_df is None or info_df.empty:
             return None
-        row = df[df["代码"] == code]
-        if row.empty:
+
+        info_dict = {}
+        for _, row in info_df.iterrows():
+            info_dict[row.iloc[0]] = row.iloc[1]
+
+        hist_df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq")
+        if hist_df is None or hist_df.empty:
             return None
-        return row.iloc[0].to_dict()
+
+        latest = hist_df.iloc[-1]
+
+        return {
+            "名称": info_dict.get("股票简称", "未知"),
+            "所属行业": info_dict.get("行业", "未知"),
+            "最新价": latest.get("收盘", 0),
+            "涨跌幅": latest.get("涨跌幅", 0),
+            "市盈率-动态": info_dict.get("总市值", "N/A"),
+            "总市值": info_dict.get("总市值", "N/A"),
+        }
     except Exception as exc:
         st.warning(f"实时行情获取失败: {exc}")
         return None
@@ -104,8 +119,11 @@ def fetch_fund_flow(code: str) -> pd.DataFrame:
 
 def fetch_lhb(code: str) -> pd.DataFrame:
     try:
-        df = ak.stock_lhb_detail_em(symbol=code)
-        return df if df is not None else pd.DataFrame()
+        df = ak.stock_lhb_stock_detail_date_em(symbol=code)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        df = df.sort_values(by="交易日", ascending=False)
+        return df.head(5)
     except Exception as exc:
         st.warning(f"龙虎榜数据获取失败: {exc}")
         return pd.DataFrame()
