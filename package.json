@@ -1,0 +1,14 @@
+{
+  "name": "stock-analysist",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler pages deploy dist",
+    "pages:deploy": "wrangler pages deploy dist",
+    "pages:dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.53.0"
+  }
+}

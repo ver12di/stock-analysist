@@ -30,9 +30,11 @@ Streamlit 驱动的 A 股多模型分析应用，结合 Gemini、Deepseek 与 Ch
    ```
    - `functions/index.ts` 暴露 Worker `fetch` 处理逻辑，同时 `functions/[[path]].ts` 让 Pages Functions 捕获全部路由。
    - `dist/` 作为静态构建产物目录（`wrangler.toml` 中的 `pages_build_output_dir`），可放置前端静态文件或构建结果。
-4. 发布到 Pages 项目：
+4. 发布到 Pages 项目（使用 Pages 专属命令而非 `wrangler deploy`）：
    ```bash
-   wrangler pages deploy dist
+   npm run deploy
+   # 或者直接使用
+   # wrangler pages deploy dist
    ```
 5. 部署 Streamlit 代理（可选）：在 `functions/index.ts` 中将 `handleRequest` 修改为将请求转发到已部署的 Streamlit 服务，或增加 API 输出，部署前可再次用 `wrangler dev` 验证。
 
