@@ -96,7 +96,7 @@ def fetch_spot_info(code: str) -> Optional[Dict]:
             "所属行业": info_dict.get("行业", "未知"),
             "最新价": latest.get("收盘", 0),
             "涨跌幅": latest.get("涨跌幅", 0),
-            "市盈率-动态": info_dict.get("总市值", "N/A"),
+            "市盈率-动态": info_dict.get("市盈率-动态", "N/A"),
             "总市值": info_dict.get("总市值", "N/A"),
         }
     except Exception as exc:
@@ -156,9 +156,11 @@ def gemini_bull_case(model: Optional[GenerativeModel], stock_name: str, sector: 
         股票名称: {stock_name or '未知'}
         所属行业: {sector or '未知'}
         请构造一段牛市故事：
+        - 仅依据界面展示的硬数据生成，不得杜撰或引用外部未提供的信息
         - 热点叙事与政策想象
         - 媒体与资金可能放大的亮点
         - 情绪驱动的潜在超预期
+        若缺少必要数据，请明确标注“数据不足”。
         输出以要点形式呈现。
         """
     )
@@ -256,10 +258,27 @@ def format_data_points(spot: Optional[Dict], flow_df: pd.DataFrame, lhb_df: pd.D
         )
     if not lhb_df.empty:
         lines.append(f"龙虎榜上榜次数: {len(lhb_df)}")
+
+    def pick_metric(df: pd.DataFrame, keywords) -> Optional[str]:
+        if df.empty:
+            return None
+        subject_col = df.columns[0]
+        if len(df.columns) < 2:
+            return None
+        latest_period_col = df.columns[1]
+        for keyword in keywords:
+            hit = df[df[subject_col].astype(str).str.contains(keyword, na=False)]
+            if not hit.empty:
+                return hit.iloc[0].get(latest_period_col)
+        return None
+
     if not fin_df.empty:
-        roe = fin_df.iloc[0].get("ROE加权(%)", "N/A")
-        net_profit = fin_df.iloc[0].get("净利润", "N/A")
-        lines.append(f"ROE: {roe} | 净利润: {net_profit}")
+        roe = pick_metric(fin_df, ["ROE", "净资产收益率", "加权ROE"])
+        net_profit = pick_metric(fin_df, ["净利润", "归母净利润"])
+        if roe is not None or net_profit is not None:
+            lines.append(
+                f"ROE: {roe if roe is not None else 'N/A'} | 净利润: {net_profit if net_profit is not None else 'N/A'}"
+            )
     return "\n".join(lines) or "无可用数据"
 
 
