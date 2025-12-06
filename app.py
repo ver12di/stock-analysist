@@ -1,4 +1,5 @@
 import textwrap
+from numbers import Number
 from typing import Dict, Optional
 
 import akshare as ak
@@ -242,19 +243,46 @@ def render_fund_flow_chart(df: pd.DataFrame):
     st.line_chart(chart_df.set_index(date_col)[value_col])
 
 
+def _format_number(value, decimals: int = 2) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "N/A"
+    if isinstance(value, Number):
+        return f"{float(value):,.{decimals}f}"
+    try:
+        numeric_value = float(str(value).replace(",", ""))
+        return f"{numeric_value:,.{decimals}f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_percentage(value, decimals: int = 2) -> str:
+    formatted = _format_number(value, decimals)
+    return formatted if formatted == "N/A" else f"{formatted}%"
+
+
 def format_data_points(spot: Optional[Dict], flow_df: pd.DataFrame, lhb_df: pd.DataFrame, fin_df: pd.DataFrame) -> str:
     lines = []
     if spot:
         lines.append(
-            f"最新价: {spot.get('最新价', 'N/A')} | 涨跌幅: {spot.get('涨跌幅', 'N/A')}%"
+            "最新价: "
+            f"{_format_number(spot.get('最新价', 'N/A'))}"
+            " | 涨跌幅: "
+            f"{_format_percentage(spot.get('涨跌幅', 'N/A'))}"
         )
         lines.append(
-            f"市盈率: {spot.get('市盈率-动态', 'N/A')} | 总市值: {spot.get('总市值', 'N/A')}"
+            "市盈率: "
+            f"{_format_number(spot.get('市盈率-动态', 'N/A'))}"
+            " | 总市值: "
+            f"{_format_number(spot.get('总市值', 'N/A'), decimals=0)}"
         )
     if not flow_df.empty:
         latest = flow_df.iloc[0]
         lines.append(
-            f"近一日主力净额: {latest.get('主力净流入-净额', 'N/A')} ({latest.get('日期', '')})"
+            "近一日主力净额: "
+            f"{_format_number(latest.get('主力净流入-净额', 'N/A'))}"
+            " ("
+            f"{latest.get('日期', '')}"
+            ")"
         )
     if not lhb_df.empty:
         lines.append(f"龙虎榜上榜次数: {len(lhb_df)}")
@@ -277,7 +305,10 @@ def format_data_points(spot: Optional[Dict], flow_df: pd.DataFrame, lhb_df: pd.D
         net_profit = pick_metric(fin_df, ["净利润", "归母净利润"])
         if roe is not None or net_profit is not None:
             lines.append(
-                f"ROE: {roe if roe is not None else 'N/A'} | 净利润: {net_profit if net_profit is not None else 'N/A'}"
+                "ROE: "
+                f"{_format_percentage(roe) if roe is not None else 'N/A'}"
+                " | 净利润: "
+                f"{_format_number(net_profit, decimals=0) if net_profit is not None else 'N/A'}"
             )
     return "\n".join(lines) or "无可用数据"
 

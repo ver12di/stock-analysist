@@ -1,5 +1,6 @@
 streamlit
-akshare
+# Akshare updates frequently to address interface changes; keep it fresh.
+akshare>=1.14.0
 openai
 google-generativeai
 pandas
