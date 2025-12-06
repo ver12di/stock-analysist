@@ -77,32 +77,62 @@ def build_gemini_client(api_key: str) -> Optional[GenerativeModel]:
 
 
 def fetch_spot_info(code: str) -> Optional[Dict]:
-    try:
-        info_df = ak.stock_individual_info_em(symbol=code)
-        if info_df is None or info_df.empty:
+    """Fetch spot info with a broad Akshare snapshot to avoid single-endpoint failures."""
+
+    def _from_spot_snapshot() -> Optional[Dict]:
+        try:
+            snapshot_df = ak.stock_zh_a_spot_em()
+        except Exception:
             return None
 
-        info_dict = {}
-        for _, row in info_df.iterrows():
-            info_dict[row.iloc[0]] = row.iloc[1]
-
-        hist_df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq")
-        if hist_df is None or hist_df.empty:
+        if snapshot_df is None or snapshot_df.empty:
             return None
 
-        latest = hist_df.iloc[-1]
+        row = snapshot_df[snapshot_df["代码"].astype(str).str.fullmatch(code)]
+        if row.empty:
+            return None
 
+        record = row.iloc[0]
         return {
-            "名称": info_dict.get("股票简称", "未知"),
-            "所属行业": info_dict.get("行业", "未知"),
-            "最新价": latest.get("收盘", 0),
-            "涨跌幅": latest.get("涨跌幅", 0),
-            "市盈率-动态": info_dict.get("市盈率-动态", "N/A"),
-            "总市值": info_dict.get("总市值", "N/A"),
+            "名称": record.get("名称", "未知"),
+            "所属行业": record.get("所属行业", "未知"),
+            "最新价": record.get("最新价", 0),
+            "涨跌幅": record.get("涨跌幅", 0),
+            "市盈率-动态": record.get("市盈率-动态", "N/A"),
+            "总市值": record.get("总市值", "N/A"),
         }
-    except Exception as exc:
-        st.warning(f"实时行情获取失败: {exc}")
-        return None
+
+    def _from_individual_and_hist() -> Optional[Dict]:
+        try:
+            info_df = ak.stock_individual_info_em(symbol=code)
+            if info_df is None or info_df.empty:
+                return None
+
+            info_dict = {}
+            for _, row in info_df.iterrows():
+                info_dict[row.iloc[0]] = row.iloc[1]
+
+            hist_df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq")
+            if hist_df is None or hist_df.empty:
+                return None
+
+            latest = hist_df.iloc[-1]
+
+            return {
+                "名称": info_dict.get("股票简称", "未知"),
+                "所属行业": info_dict.get("行业", "未知"),
+                "最新价": latest.get("收盘", 0),
+                "涨跌幅": latest.get("涨跌幅", 0),
+                "市盈率-动态": info_dict.get("市盈率-动态", "N/A"),
+                "总市值": info_dict.get("总市值", "N/A"),
+            }
+        except Exception:
+            return None
+
+    spot_info = _from_spot_snapshot() or _from_individual_and_hist()
+    if spot_info is None:
+        st.warning("实时行情获取失败: Akshare 接口返回空数据")
+    return spot_info
 
 
 def fetch_fund_flow(code: str) -> pd.DataFrame:
