@@ -17,10 +17,21 @@ def load_secret(key: str, label: str, help_text: str = "", default: str = "") ->
 
 def get_api_keys() -> Dict[str, str]:
     st.sidebar.header("🔑 API 密钥配置")
-    openai_key = load_secret(
-        "openai_api_key",
-        "OpenAI / ChatGPT Key",
-        "用于 ChatGPT 评审 (gpt-4o 系列)",
+    doubao_key = load_secret(
+        "doubao_api_key",
+        "豆包 API Key",
+        "用于豆包评级 (火山方舟 Ark)",
+    )
+    doubao_base_url = load_secret(
+        "doubao_base_url",
+        "豆包 Base URL",
+        "可选，默认火山方舟 https://ark.cn-beijing.volces.com/api/v3",
+        default="https://ark.cn-beijing.volces.com/api/v3",
+    )
+    doubao_endpoint_id = load_secret(
+        "doubao_endpoint_id",
+        "豆包 Endpoint ID",
+        "火山方舟在线推理 Endpoint ID，如 ep-xxxx",
     )
     deepseek_key = load_secret(
         "deepseek_api_key",
@@ -39,7 +50,9 @@ def get_api_keys() -> Dict[str, str]:
         "用于 Gemini 乐观建构 (google-generativeai)",
     )
     return {
-        "openai_key": openai_key.strip(),
+        "doubao_key": doubao_key.strip(),
+        "doubao_base_url": doubao_base_url.strip(),
+        "doubao_endpoint_id": doubao_endpoint_id.strip(),
         "deepseek_key": deepseek_key.strip(),
         "deepseek_base_url": deepseek_base_url.strip(),
         "gemini_key": gemini_key.strip(),
@@ -169,9 +182,13 @@ def deepseek_attack(client: Optional[OpenAI], base_prompt: str, data_points: str
         return f"Deepseek 调用失败: {exc}"
 
 
-def chatgpt_judge(client: Optional[OpenAI], hope: str, audit: str) -> str:
+def doubao_judge(
+    client: Optional[OpenAI], endpoint_id: str, hope: str, audit: str
+) -> str:
     if not client:
-        return "ChatGPT 未配置 API Key，无法给出评级。"
+        return "豆包未配置 API Key，无法给出评级。"
+    if not endpoint_id:
+        return "豆包未配置 Endpoint ID，无法给出评级。"
     messages = [
         {
             "role": "system",
@@ -187,10 +204,10 @@ def chatgpt_judge(client: Optional[OpenAI], hope: str, audit: str) -> str:
         },
     ]
     try:
-        resp = client.chat.completions.create(model="gpt-4o-mini", messages=messages)
+        resp = client.chat.completions.create(model=endpoint_id, messages=messages)
         return resp.choices[0].message.content
     except Exception as exc:
-        return f"ChatGPT 调用失败: {exc}"
+        return f"豆包调用失败: {exc}"
 
 
 def render_fund_flow_chart(df: pd.DataFrame):
@@ -272,14 +289,18 @@ def stock_verification_flow(api_keys: Dict[str, str]):
         deepseek_client = build_openai_client(
             api_keys.get("deepseek_key", ""), api_keys.get("deepseek_base_url", "")
         )
-        chatgpt_client = build_openai_client(api_keys.get("openai_key", ""))
+        doubao_client = build_openai_client(
+            api_keys.get("doubao_key", ""), api_keys.get("doubao_base_url", "")
+        )
 
         with st.spinner("Gemini 正在捕捉市场情绪…"):
             bull_case = gemini_bull_case(gemini_model, stock_name, sector)
         with st.spinner("Deepseek 正在无情拆解…"):
             attack = deepseek_attack(deepseek_client, bull_case, data_points)
-        with st.spinner("ChatGPT 正在综合评级…"):
-            verdict = chatgpt_judge(chatgpt_client, bull_case, attack)
+        with st.spinner("豆包正在综合评级…"):
+            verdict = doubao_judge(
+                doubao_client, api_keys.get("doubao_endpoint_id", ""), bull_case, attack
+            )
 
         col1, col2, col3 = st.columns(3)
         col1.markdown("### 🚀 Gemini 乐观论点")
@@ -288,7 +309,7 @@ def stock_verification_flow(api_keys: Dict[str, str]):
         col2.markdown("### 🛡️ Deepseek 审计")
         col2.write(attack)
 
-        col3.markdown("### ⚖️ ChatGPT 评级")
+        col3.markdown("### ⚖️ 豆包评级")
         col3.write(verdict)
 
 
@@ -314,7 +335,9 @@ def sector_rotation_flow(api_keys: Dict[str, str]):
         deepseek_client = build_openai_client(
             api_keys.get("deepseek_key", ""), api_keys.get("deepseek_base_url", "")
         )
-        chatgpt_client = build_openai_client(api_keys.get("openai_key", ""))
+        doubao_client = build_openai_client(
+            api_keys.get("doubao_key", ""), api_keys.get("doubao_base_url", "")
+        )
 
         with st.spinner("Deepseek 正在扫描强势板块…"):
             deepseek_msg = deepseek_attack(
@@ -328,8 +351,10 @@ def sector_rotation_flow(api_keys: Dict[str, str]):
                 "市场热点组合",
                 "政策与外部宏观",
             )
-        with st.spinner("ChatGPT 正在生成次日脚本…"):
-            script_msg = chatgpt_judge(chatgpt_client, macro_msg, deepseek_msg)
+        with st.spinner("豆包正在生成次日脚本…"):
+            script_msg = doubao_judge(
+                doubao_client, api_keys.get("doubao_endpoint_id", ""), macro_msg, deepseek_msg
+            )
 
         col1, col2, col3 = st.columns(3)
         col1.markdown("### 🚀 Gemini 宏观亮点")
@@ -338,14 +363,14 @@ def sector_rotation_flow(api_keys: Dict[str, str]):
         col2.markdown("### 🛡️ Deepseek 板块要点")
         col2.write(deepseek_msg)
 
-        col3.markdown("### ⚖️ ChatGPT 次日剧本")
+        col3.markdown("### ⚖️ 豆包次日剧本")
         col3.write(script_msg)
 
 
 def main():
     st.set_page_config(page_title="A股三位一体指挥舱", layout="wide")
     st.title("A股三位一体指挥舱 🚀🛡️⚖️")
-    st.caption("Construct - Destroy - Rebuild: Gemini × Deepseek × ChatGPT")
+    st.caption("Construct - Destroy - Rebuild: Gemini × Deepseek × 豆包")
 
     api_keys = get_api_keys()
 

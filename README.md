@@ -1,6 +1,6 @@
 # A-Share Trinity Command Center (A股三位一体指挥舱)
 
-Streamlit app that orchestrates Gemini, Deepseek, and ChatGPT to perform Construct → Destroy → Rebuild analysis on Chinese A-share stocks and sector rotation.
+Streamlit app that orchestrates Gemini, Deepseek, and 豆包 to perform Construct → Destroy → Rebuild analysis on Chinese A-share stocks and sector rotation.
 
 ## Running locally
 1. Create and activate a virtual environment.
@@ -17,10 +17,12 @@ Streamlit app that orchestrates Gemini, Deepseek, and ChatGPT to perform Constru
 Create a **Secrets** entry in Streamlit Cloud with the following TOML structure:
 
 ```toml
-openai_api_key = "sk-xxx"          # For ChatGPT ratings
-deepseek_api_key = "sk-xxx"        # For Deepseek audit (OpenAI-compatible)
+doubao_api_key = "ak-xxx"                # For 豆包评级 (Ark API Key)
+doubao_base_url = "https://ark.cn-beijing.volces.com/api/v3"  # Optional override
+doubao_endpoint_id = "ep-xxxx"           # 豆包在线推理 Endpoint ID
+deepseek_api_key = "sk-xxx"              # For Deepseek audit (OpenAI-compatible)
 deepseek_base_url = "https://api.deepseek.com"  # Optional override
-gemini_api_key = "your-gemini-key" # For Gemini optimism
+gemini_api_key = "your-gemini-key"       # For Gemini optimism
 ```
 
 The app will read from `st.secrets` first. If keys are absent (local testing), input them through the sidebar.
