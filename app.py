@@ -70,7 +70,7 @@ def build_gemini_client(api_key: str) -> Optional[GenerativeModel]:
         return None
     try:
         configure(api_key=api_key)
-        return GenerativeModel("gemini-3-pro-preview")
+        return GenerativeModel("gemini-2.5-pro")
     except Exception:
         return None
 
