@@ -139,6 +139,65 @@ def fetch_financials(code: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def fetch_business_and_products(code: str) -> pd.DataFrame:
+    try:
+        df = ak.stock_zyjs_ths(symbol=code)
+        return df if df is not None else pd.DataFrame()
+    except Exception as exc:
+        st.warning(f"主营业务获取失败: {exc}")
+        return pd.DataFrame()
+
+
+def fetch_company_profile(code: str) -> Dict[str, str]:
+    try:
+        info_df = ak.stock_individual_info_em(symbol=code)
+        if info_df is None or info_df.empty:
+            return {}
+        info_dict: Dict[str, str] = {}
+        for _, row in info_df.iterrows():
+            info_dict[str(row.iloc[0])] = row.iloc[1]
+        return {
+            "行业": info_dict.get("行业", "未知"),
+            "总股本": info_dict.get("总股本", "N/A"),
+            "上市日期": info_dict.get("上市日期", "N/A"),
+            "股票简称": info_dict.get("股票简称", "未知"),
+            "市盈率-动态": info_dict.get("市盈率-动态", "N/A"),
+            "总市值": info_dict.get("总市值", "N/A"),
+        }
+    except Exception as exc:
+        st.warning(f"公司概况获取失败: {exc}")
+        return {}
+
+
+def fetch_recent_news(code: str, limit: int = 5) -> pd.DataFrame:
+    try:
+        df = ak.stock_news_em(symbol=code)
+        if df is None:
+            return pd.DataFrame()
+        return df.head(limit)
+    except Exception as exc:
+        st.warning(f"新闻获取失败: {exc}")
+        return pd.DataFrame()
+
+
+def fetch_financial_indicators(code: str) -> pd.DataFrame:
+    try:
+        df = ak.stock_financial_analysis_indicator(symbol=code)
+        return df if df is not None else pd.DataFrame()
+    except Exception as exc:
+        st.warning(f"关键财务指标获取失败: {exc}")
+        return pd.DataFrame()
+
+
+def fetch_valuation_indicator(code: str) -> pd.DataFrame:
+    try:
+        df = ak.stock_a_lg_indicator(symbol=code)
+        return df if df is not None else pd.DataFrame()
+    except Exception as exc:
+        st.warning(f"估值分位获取失败: {exc}")
+        return pd.DataFrame()
+
+
 def fetch_sector_perf() -> pd.DataFrame:
     try:
         df = ak.stock_board_industry_name_em()
@@ -148,7 +207,13 @@ def fetch_sector_perf() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def gemini_bull_case(model: Optional[GenerativeModel], stock_name: str, sector: str) -> str:
+def gemini_bull_case(
+    model: Optional[GenerativeModel],
+    stock_name: str,
+    sector: str,
+    business_desc: str = "",
+    news_digest: str = "",
+) -> str:
     if not model:
         return "Gemini 未配置 API Key，无法生成乐观论点。"
     prompt = textwrap.dedent(
@@ -156,6 +221,8 @@ def gemini_bull_case(model: Optional[GenerativeModel], stock_name: str, sector: 
         你是“市场情绪猎手”，关注 A 股题材炒作与政策催化。
         股票名称: {stock_name or '未知'}
         所属行业: {sector or '未知'}
+        公司主营业务与产品: {business_desc or '未提供'}
+        近期新闻摘要: {news_digest or '未提供'}
         请构造一段牛市故事：
         - 仅依据界面展示的硬数据生成，不得杜撰或引用外部未提供的信息
         - 热点叙事与政策想象
@@ -185,7 +252,7 @@ def deepseek_attack(client: Optional[OpenAI], base_prompt: str, data_points: str
             "content": (
                 "Gemini 的牛市叙事如下：\n"
                 f"{base_prompt}\n\n"
-                "结合以下硬数据，列出至少 3 个风险或矛盾，格式为要点：\n"
+                "结合以下硬数据（重点关注 ROE、毛利率、估值分位、净利润增速），列出至少 3 个风险或矛盾，格式为要点：\n"
                 f"{data_points}"
             ),
         },
@@ -260,6 +327,16 @@ def _format_percentage(value, decimals: int = 2) -> str:
     return formatted if formatted == "N/A" else f"{formatted}%"
 
 
+def df_to_markdown(df: pd.DataFrame, max_rows: int = 5) -> str:
+    if df is None or df.empty:
+        return "无数据"
+    limited = df.head(max_rows)
+    try:
+        return limited.to_markdown(index=False)
+    except Exception:
+        return limited.to_string(index=False)
+
+
 def format_data_points(spot: Optional[Dict], flow_df: pd.DataFrame, lhb_df: pd.DataFrame, fin_df: pd.DataFrame) -> str:
     lines = []
     if spot:
@@ -321,24 +398,75 @@ def stock_verification_flow(api_keys: Dict[str, str]):
             st.error("请先输入股票代码")
             return
 
-        spot = fetch_spot_info(code)
-        flow_df = fetch_fund_flow(code)
-        lhb_df = fetch_lhb(code)
-        fin_df = fetch_financials(code)
+        with st.status("⏳ 正在抓取深度基本面与新闻…", state="running") as status:
+            profile = fetch_company_profile(code)
+            spot = fetch_spot_info(code)
+            flow_df = fetch_fund_flow(code)
+            lhb_df = fetch_lhb(code)
+            fin_df = fetch_financials(code)
+            business_df = fetch_business_and_products(code)
+            news_df = fetch_recent_news(code)
+            fin_indicator_df = fetch_financial_indicators(code)
+            valuation_df = fetch_valuation_indicator(code)
+            status.update(label="✅ 基本面数据就绪，开始建模", state="complete")
 
-        stock_name = spot.get("名称", "未知") if spot else "未知"
-        sector = spot.get("所属行业", "未知") if spot else "未知"
+        stock_name = (
+            profile.get("股票简称")
+            if profile
+            else (spot.get("名称", "未知") if spot else "未知")
+        )
+        sector = profile.get("行业", "未知") if profile else (spot.get("所属行业", "未知") if spot else "未知")
         data_points = format_data_points(spot, flow_df, lhb_df, fin_df)
 
+        def summarize_business(df: pd.DataFrame) -> str:
+            if df.empty:
+                return "未获取到主营业务信息"
+            lines = []
+            business_col = next((c for c in df.columns if "主营" in str(c)), None)
+            product_col = next((c for c in df.columns if "产品" in str(c)), None)
+            for _, row in df.head(5).iterrows():
+                biz = row.get(business_col, "") if business_col else ""
+                product = row.get(product_col, "") if product_col else ""
+                lines.append(f"- {biz or '业务'} / {product or '产品'}")
+            return "\n".join(lines)
+
+        def summarize_news(df: pd.DataFrame) -> str:
+            if df.empty:
+                return "暂无新闻"
+            title_col = next((c for c in df.columns if "标题" in str(c)), df.columns[0])
+            summary_col = next((c for c in df.columns if "摘要" in str(c) or "内容" in str(c)), None)
+            items = []
+            for _, row in df.iterrows():
+                title = row.get(title_col, "")
+                summary = row.get(summary_col, "") if summary_col else ""
+                items.append(f"- {title}: {summary}")
+            return "\n".join(items)
+
+        def summarize_financial_indicators(df: pd.DataFrame) -> pd.DataFrame:
+            if df.empty:
+                return pd.DataFrame()
+            columns_priority = ["报告期", "销售毛利率", "净资产收益率", "扣非净利润同比增长(%)"]
+            selected_cols = [c for c in columns_priority if c in df.columns]
+            if selected_cols:
+                return df[selected_cols].head(3)
+            return df.head(3)
+
+        business_desc = summarize_business(business_df)
+        news_digest = summarize_news(news_df)
+        fin_indicator_focus = summarize_financial_indicators(fin_indicator_df)
+        valuation_focus = valuation_df.head(3) if not valuation_df.empty else pd.DataFrame()
+
         st.subheader(f"{stock_name} ({code}) 数据概览")
-        if spot:
-            st.write({
-                "价格": spot.get("最新价"),
-                "涨跌幅": spot.get("涨跌幅"),
-                "PE(TTM)": spot.get("市盈率-动态"),
-                "总市值": spot.get("总市值"),
-                "行业": sector,
-            })
+        overview_data = {
+            "价格": spot.get("最新价") if spot else "N/A",
+            "涨跌幅": spot.get("涨跌幅") if spot else "N/A",
+            "PE(TTM)": profile.get("市盈率-动态") if profile else spot.get("市盈率-动态") if spot else "N/A",
+            "总市值": profile.get("总市值") if profile else spot.get("总市值") if spot else "N/A",
+            "行业": sector,
+            "总股本": profile.get("总股本", "N/A") if profile else "N/A",
+            "上市日期": profile.get("上市日期", "N/A") if profile else "N/A",
+        }
+        st.write(overview_data)
         if not fin_df.empty:
             st.markdown("**财务摘要 (部分)**")
             st.dataframe(fin_df.head())
@@ -349,6 +477,31 @@ def stock_verification_flow(api_keys: Dict[str, str]):
         st.markdown("**主力资金流趋势**")
         render_fund_flow_chart(flow_df)
 
+        with st.expander("📊 查看深度基本面数据"):
+            st.markdown("**主营业务与产品**")
+            if business_df.empty:
+                st.info("暂无主营业务数据")
+            else:
+                st.dataframe(business_df)
+
+            st.markdown("**关键财务指标**")
+            if fin_indicator_df.empty:
+                st.info("暂无关键财务指标")
+            else:
+                st.dataframe(fin_indicator_df)
+
+            st.markdown("**估值分位 (乐咕)**")
+            if valuation_df.empty:
+                st.info("暂无估值分位数据")
+            else:
+                st.dataframe(valuation_df)
+
+            st.markdown("**近期新闻 (Top 5)**")
+            if news_df.empty:
+                st.info("暂无新闻数据")
+            else:
+                st.dataframe(news_df)
+
         gemini_model = build_gemini_client(api_keys.get("gemini_key", ""))
         deepseek_client = build_openai_client(
             api_keys.get("deepseek_key", ""), api_keys.get("deepseek_base_url", "")
@@ -357,10 +510,25 @@ def stock_verification_flow(api_keys: Dict[str, str]):
             api_keys.get("doubao_key", ""), api_keys.get("doubao_base_url", "")
         )
 
-        with st.spinner("Gemini 正在捕捉市场情绪…"):
-            bull_case = gemini_bull_case(gemini_model, stock_name, sector)
-        with st.spinner("Deepseek 正在无情拆解…"):
-            attack = deepseek_attack(deepseek_client, bull_case, data_points)
+        gemini_business_text = business_desc or "未提供主营业务"
+        gemini_news_text = news_digest or "未提供新闻"
+        deepseek_data = "\n".join(
+            [
+                "基础行情与资金:",
+                data_points,
+                "\n关键财务指标:",
+                df_to_markdown(fin_indicator_focus, max_rows=3),
+                "\n估值分位:",
+                df_to_markdown(valuation_focus, max_rows=3),
+            ]
+        )
+
+        with st.spinner("Gemini 正在基于主营和新闻构建叙事…"):
+            bull_case = gemini_bull_case(
+                gemini_model, stock_name, sector, gemini_business_text, gemini_news_text
+            )
+        with st.spinner("Deepseek 正在用硬指标拆解…"):
+            attack = deepseek_attack(deepseek_client, bull_case, deepseek_data)
         with st.spinner("豆包正在综合评级…"):
             verdict = doubao_judge(doubao_client, bull_case, attack)
 
