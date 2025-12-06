@@ -1,0 +1,5 @@
+streamlit
+akshare
+openai
+google-generativeai
+pandas
