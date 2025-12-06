@@ -31,12 +31,15 @@ def get_api_keys() -> Dict[str, str]:
     doubao_endpoint_id = load_secret(
         "doubao_endpoint_id",
         "豆包 Endpoint ID",
-        "火山方舟在线推理 Endpoint ID，如 ep-xxxx",
+        (
+            "火山方舟在线推理 Endpoint ID，如 ep-xxxx。"
+            "如果仅有快捷 API Key，请先在火山方舟控制台创建在线推理 Endpoint 并填写 ep- 开头的 ID。"
+        ),
     )
     deepseek_key = load_secret(
         "deepseek_api_key",
         "Deepseek Key",
-        "用于 Deepseek 审核 (OpenAI 兼容)",
+        "用于 DeepSeek-V3.2 思考模式审计 (OpenAI 兼容)",
     )
     deepseek_base_url = load_secret(
         "deepseek_base_url",
@@ -76,7 +79,7 @@ def build_gemini_client(api_key: str) -> Optional[GenerativeModel]:
         return None
     try:
         configure(api_key=api_key)
-        return GenerativeModel("gemini-1.5-flash")
+        return GenerativeModel("gemini-3-pro-preview")
     except Exception:
         return None
 
@@ -176,7 +179,9 @@ def deepseek_attack(client: Optional[OpenAI], base_prompt: str, data_points: str
         },
     ]
     try:
-        resp = client.chat.completions.create(model="deepseek-chat", messages=messages)
+        resp = client.chat.completions.create(
+            model="deepseek-reasoner", messages=messages
+        )
         return resp.choices[0].message.content
     except Exception as exc:
         return f"Deepseek 调用失败: {exc}"
@@ -188,7 +193,10 @@ def doubao_judge(
     if not client:
         return "豆包未配置 API Key，无法给出评级。"
     if not endpoint_id:
-        return "豆包未配置 Endpoint ID，无法给出评级。"
+        return (
+            "豆包未配置 Endpoint ID，无法给出评级。请在火山方舟控制台创建在线"
+            "推理 Endpoint（ep- 开头），快捷 API 仅提供 Key 无法直接调用。"
+        )
     messages = [
         {
             "role": "system",
