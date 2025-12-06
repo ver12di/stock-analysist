@@ -28,10 +28,11 @@ def get_api_keys() -> Dict[str, str]:
         "可选，默认火山方舟 https://ark.cn-beijing.volces.com/api/v3",
         default="https://ark.cn-beijing.volces.com/api/v3",
     )
-    doubao_endpoint_id = load_secret(
-        "doubao_endpoint_id",
-        "豆包 Endpoint ID",
-        "火山方舟在线推理 Endpoint ID，如 ep-xxxx",
+    doubao_model = load_secret(
+        "doubao_model",
+        "豆包模型名称",
+        "例如 doubao-seed-1-6-thinking-250715，可直接调用无需 Endpoint ID",
+        default="doubao-seed-1-6-thinking-250715",
     )
     deepseek_key = load_secret(
         "deepseek_api_key",
@@ -52,7 +53,7 @@ def get_api_keys() -> Dict[str, str]:
     return {
         "doubao_key": doubao_key.strip(),
         "doubao_base_url": doubao_base_url.strip(),
-        "doubao_endpoint_id": doubao_endpoint_id.strip(),
+        "doubao_model": doubao_model.strip(),
         "deepseek_key": deepseek_key.strip(),
         "deepseek_base_url": deepseek_base_url.strip(),
         "gemini_key": gemini_key.strip(),
@@ -183,12 +184,12 @@ def deepseek_attack(client: Optional[OpenAI], base_prompt: str, data_points: str
 
 
 def doubao_judge(
-    client: Optional[OpenAI], endpoint_id: str, hope: str, audit: str
+    client: Optional[OpenAI], model_name: str, hope: str, audit: str
 ) -> str:
     if not client:
         return "豆包未配置 API Key，无法给出评级。"
-    if not endpoint_id:
-        return "豆包未配置 Endpoint ID，无法给出评级。"
+    if not model_name:
+        return "豆包未配置模型名称，无法给出评级。"
     messages = [
         {
             "role": "system",
@@ -204,7 +205,7 @@ def doubao_judge(
         },
     ]
     try:
-        resp = client.chat.completions.create(model=endpoint_id, messages=messages)
+        resp = client.chat.completions.create(model=model_name, messages=messages)
         return resp.choices[0].message.content
     except Exception as exc:
         return f"豆包调用失败: {exc}"
@@ -299,7 +300,7 @@ def stock_verification_flow(api_keys: Dict[str, str]):
             attack = deepseek_attack(deepseek_client, bull_case, data_points)
         with st.spinner("豆包正在综合评级…"):
             verdict = doubao_judge(
-                doubao_client, api_keys.get("doubao_endpoint_id", ""), bull_case, attack
+                doubao_client, api_keys.get("doubao_model", ""), bull_case, attack
             )
 
         col1, col2, col3 = st.columns(3)
@@ -353,7 +354,7 @@ def sector_rotation_flow(api_keys: Dict[str, str]):
             )
         with st.spinner("豆包正在生成次日脚本…"):
             script_msg = doubao_judge(
-                doubao_client, api_keys.get("doubao_endpoint_id", ""), macro_msg, deepseek_msg
+                doubao_client, api_keys.get("doubao_model", ""), macro_msg, deepseek_msg
             )
 
         col1, col2, col3 = st.columns(3)

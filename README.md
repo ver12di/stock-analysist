@@ -19,7 +19,7 @@ Create a **Secrets** entry in Streamlit Cloud with the following TOML structure:
 ```toml
 doubao_api_key = "ak-xxx"                # For 豆包评级 (Ark API Key)
 doubao_base_url = "https://ark.cn-beijing.volces.com/api/v3"  # Optional override
-doubao_endpoint_id = "ep-xxxx"           # 豆包在线推理 Endpoint ID
+doubao_model = "doubao-seed-1-6-thinking-250715"  # 豆包模型名称，可直接调用
 deepseek_api_key = "sk-xxx"              # For Deepseek audit (OpenAI-compatible)
 deepseek_base_url = "https://api.deepseek.com"  # Optional override
 gemini_api_key = "your-gemini-key"       # For Gemini optimism
