@@ -8,6 +8,10 @@ Streamlit app that orchestrates Gemini, Deepseek, and 豆包 to perform Construc
    ```bash
    pip install -r requirements.txt
    ```
+   > **Akshare tip:** Akshare updates frequently to fix interface changes. If you hit data errors, force an upgrade:
+   > ```bash
+   > pip install --upgrade akshare
+   > ```
 3. Start the app:
    ```bash
    streamlit run app.py
